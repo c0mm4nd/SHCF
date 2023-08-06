@@ -10,10 +10,13 @@ cores = multiprocessing.cpu_count() // 2
 args = parse_args()
 Ks = eval(args.Ks)
 
-data_generator = Data(args, path=args.data_path + args.dataset, batch_size=args.batch_size)
+data_generator = Data(
+    args, path=args.data_path + args.dataset, batch_size=args.batch_size
+)
 USR_NUM, ITEM_NUM = data_generator.n_users, data_generator.n_items
 N_TRAIN, N_TEST = data_generator.n_train, data_generator.n_test
 BATCH_SIZE = args.batch_size
+
 
 def ranklist_by_heapq(user_pos_test, test_items, rating, Ks):
     pos = user_pos_test[0]
@@ -29,8 +32,9 @@ def ranklist_by_heapq(user_pos_test, test_items, rating, Ks):
             r.append(1)
         else:
             r.append(0)
-    auc = 0.
+    auc = 0.0
     return r, auc
+
 
 def get_auc(item_score, user_pos_test):
     item_score = sorted(item_score.items(), key=lambda kv: kv[1])
@@ -47,12 +51,13 @@ def get_auc(item_score, user_pos_test):
     auc = metrics.auc(ground_truth=r, prediction=posterior)
     return auc
 
+
 def ranklist_by_sorted(user_pos_test, test_items, rating, Ks):
     K_max = max(Ks)
     item_score = {}
     for i in user_pos_test:
         item_score[i] = rating[i]
-    for i in random.sample(set(test_items)-set(user_pos_test), 99):
+    for i in random.sample(set(test_items) - set(user_pos_test), 99):
         item_score[i] = rating[i]
     K_max_item_score = heapq.nlargest(K_max, item_score, key=item_score.get)
 
@@ -65,6 +70,7 @@ def ranklist_by_sorted(user_pos_test, test_items, rating, Ks):
     auc = get_auc(item_score, user_pos_test)
     return r, auc
 
+
 def get_performance(user_pos_test, r, auc, Ks):
     precision, recall, ndcg, hit_ratio = [], [], [], []
 
@@ -74,28 +80,33 @@ def get_performance(user_pos_test, r, auc, Ks):
         ndcg.append(metrics.ndcg_at_k(r, K))
         hit_ratio.append(metrics.hit_at_k(r, K))
 
-    return {'recall': np.array(recall), 'precision': np.array(precision),
-            'ndcg': np.array(ndcg), 'hit_ratio': np.array(hit_ratio), 'auc': auc}
+    return {
+        "recall": np.array(recall),
+        "precision": np.array(precision),
+        "ndcg": np.array(ndcg),
+        "hit_ratio": np.array(hit_ratio),
+        "auc": auc,
+    }
 
 
 def test_one_user(x):
     # user u's ratings for user u
     rating = x[0]
-    #uid
+    # uid
     u = x[1]
-    #user u's items in the training set
+    # user u's items in the training set
     try:
         training_items = data_generator.train_items[u]
     except Exception:
         training_items = []
-    #user u's items in the test set
+    # user u's items in the test set
     user_pos_test = data_generator.test_set[u]
 
     all_items = set(range(ITEM_NUM))
 
     test_items = list(all_items - set(training_items))
 
-    if args.test_flag == 'part':
+    if args.test_flag == "part":
         r, auc = ranklist_by_heapq(user_pos_test, test_items, rating, Ks)
     else:
         r, auc = ranklist_by_sorted(user_pos_test, test_items, rating, Ks)
@@ -103,9 +114,22 @@ def test_one_user(x):
     return get_performance(user_pos_test, r, auc, Ks)
 
 
-def test(sess, model, users_to_test, test_seq, test_mask, drop_flag=False, batch_test_flag=False):
-    result = {'precision': np.zeros(len(Ks)), 'recall': np.zeros(len(Ks)), 'ndcg': np.zeros(len(Ks)),
-              'hit_ratio': np.zeros(len(Ks)), 'auc': 0.}
+def test(
+    sess,
+    model,
+    users_to_test,
+    test_seq,
+    test_mask,
+    drop_flag=False,
+    batch_test_flag=False,
+):
+    result = {
+        "precision": np.zeros(len(Ks)),
+        "recall": np.zeros(len(Ks)),
+        "ndcg": np.zeros(len(Ks)),
+        "hit_ratio": np.zeros(len(Ks)),
+        "auc": 0.0,
+    }
 
     pool = multiprocessing.Pool(cores)
 
@@ -122,12 +146,11 @@ def test(sess, model, users_to_test, test_seq, test_mask, drop_flag=False, batch
         start = u_batch_id * u_batch_size
         end = (u_batch_id + 1) * u_batch_size
 
-        user_batch = test_users[start: end]
+        user_batch = test_users[start:end]
         seq = [test_seq[u] for u in user_batch]
         mask = [test_mask[u] for u in user_batch]
 
         if batch_test_flag:
-
             n_item_batchs = ITEM_NUM // i_batch_size + 1
             rate_batch = np.zeros(shape=(len(user_batch), ITEM_NUM))
 
@@ -139,18 +162,28 @@ def test(sess, model, users_to_test, test_seq, test_mask, drop_flag=False, batch
                 item_batch = range(i_start, i_end)
 
                 if drop_flag == False:
-                    i_rate_batch = sess.run(model.batch_ratings, {model.users: user_batch,
-                                                                model.pos_items: item_batch,
-                                                                model.mask: mask,
-                                                                model.sequence: seq})
+                    i_rate_batch = sess.run(
+                        model.batch_ratings,
+                        {
+                            model.users: user_batch,
+                            model.pos_items: item_batch,
+                            model.mask: mask,
+                            model.sequence: seq,
+                        },
+                    )
                 else:
-                    i_rate_batch = sess.run(model.batch_ratings, {model.users: user_batch,
-                                                                model.pos_items: item_batch,
-                                                                model.sequence: seq,
-                                                                model.mask: mask,
-                                                                model.node_dropout: [0.]*len(eval(args.layer_size)),
-                                                                model.mess_dropout: [0.]*len(eval(args.layer_size))})
-                rate_batch[:, i_start: i_end] = i_rate_batch
+                    i_rate_batch = sess.run(
+                        model.batch_ratings,
+                        {
+                            model.users: user_batch,
+                            model.pos_items: item_batch,
+                            model.sequence: seq,
+                            model.mask: mask,
+                            model.node_dropout: [0.0] * len(eval(args.layer_size)),
+                            model.mess_dropout: [0.0] * len(eval(args.layer_size)),
+                        },
+                    )
+                rate_batch[:, i_start:i_end] = i_rate_batch
                 i_count += i_rate_batch.shape[1]
 
             assert i_count == ITEM_NUM
@@ -159,47 +192,62 @@ def test(sess, model, users_to_test, test_seq, test_mask, drop_flag=False, batch
             item_batch = range(ITEM_NUM)
 
             if drop_flag == False:
-                rate_batch = sess.run(model.batch_ratings, {model.users: user_batch,
-                                                            model.pos_items: item_batch,
-                                                            model.sequence: seq,
-                                                            model.mask: mask
-                                                            })
+                rate_batch = sess.run(
+                    model.batch_ratings,
+                    {
+                        model.users: user_batch,
+                        model.pos_items: item_batch,
+                        model.sequence: seq,
+                        model.mask: mask,
+                    },
+                )
             else:
-                rate_batch = sess.run(model.batch_ratings, {model.users: user_batch,
-                                                            model.sequence: seq,
-                                                            model.mask: mask,
-                                                            model.pos_items: item_batch,
-                                                            model.node_dropout: [0.] * len(eval(args.layer_size)),
-                                                            model.mess_dropout: [0.] * len(eval(args.layer_size))})
+                rate_batch = sess.run(
+                    model.batch_ratings,
+                    {
+                        model.users: user_batch,
+                        model.sequence: seq,
+                        model.mask: mask,
+                        model.pos_items: item_batch,
+                        model.node_dropout: [0.0] * len(eval(args.layer_size)),
+                        model.mess_dropout: [0.0] * len(eval(args.layer_size)),
+                    },
+                )
 
         user_batch_rating_uid = zip(rate_batch, user_batch)
         batch_result = pool.map(test_one_user, user_batch_rating_uid)
         count += len(batch_result)
 
         for re in batch_result:
-            result['precision'] += re['precision']/n_test_users
-            result['recall'] += re['recall']/n_test_users
-            result['ndcg'] += re['ndcg']/n_test_users
-            result['hit_ratio'] += re['hit_ratio']/n_test_users
-            result['auc'] += re['auc']/n_test_users
-
+            result["precision"] += re["precision"] / n_test_users
+            result["recall"] += re["recall"] / n_test_users
+            result["ndcg"] += re["ndcg"] / n_test_users
+            result["hit_ratio"] += re["hit_ratio"] / n_test_users
+            result["auc"] += re["auc"] / n_test_users
 
     assert count == n_test_users
     pool.close()
     return result
 
-def early_stopping(log_value, best_value, stopping_step, expected_order='acc', flag_step=100):
-    # early stopping strategy:
-    assert expected_order in ['acc', 'dec']
 
-    if (expected_order == 'acc' and log_value >= best_value) or (expected_order == 'dec' and log_value <= best_value):
+def early_stopping(
+    log_value, best_value, stopping_step, expected_order="acc", flag_step=100
+):
+    # early stopping strategy:
+    assert expected_order in ["acc", "dec"]
+
+    if (expected_order == "acc" and log_value >= best_value) or (
+        expected_order == "dec" and log_value <= best_value
+    ):
         stopping_step = 0
         best_value = log_value
     else:
         stopping_step += 1
 
     if stopping_step >= flag_step:
-        print("Early stopping is trigger at step: {} log:{}".format(flag_step, log_value))
+        print(
+            "Early stopping is trigger at step: {} log:{}".format(flag_step, log_value)
+        )
         should_stop = True
     else:
         should_stop = False

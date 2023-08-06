@@ -111,6 +111,7 @@ class Data(object):
             print('already load adj matrix')
         except Exception:
             if 'ml' in path:
+                
                 cate = '/item_categary.txt'
                 if args.sample:
                     cate = '/s_item_categary.txt'
